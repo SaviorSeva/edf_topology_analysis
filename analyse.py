@@ -1,11 +1,10 @@
 import json
 
 class Link:
-    def __init__(self, id_start, id_end, link_quality, forward_lqi):
+    def __init__(self, id_start, id_end, link_quality):
         self.id_start = id_start
         self.id_end = id_end
         self.link_quality = link_quality
-        self.forwardLqi = forward_lqi
 
 class Node:
     def __init__(self, id):
@@ -54,9 +53,9 @@ def main():
     # Get the distance to coordinator 
 
     with open('indicateurs-adp-k/indicateurs-adp-k.log') as indicateurs_adp_k_file:
-            iak_data = json.load(indicateurs_adp_k_file)
-            for entry in iak_data['AdpRoutingTable']:
-                node_list[int(entry['DestAddress'])].hop_from_main = int(entry['HopCount'])
+        iak_data = json.load(indicateurs_adp_k_file)
+        for entry in iak_data['AdpRoutingTable']:
+            node_list[int(entry['DestAddress'])].hop_from_main = int(entry['HopCount'])
 
     # Get the droprate (from main coordinator) for each node
     with open('stats-cpl-k/stats-cpl-k.log') as stats_cpl_k_file:
@@ -70,10 +69,34 @@ def main():
                     node.success_rate = int(sck_data['ComOkNumber']) / int(sck_data['ComNumber'])  
 
     # Get the neighbour data of each node
+    with open('voisins-c/something.json') as voisins_c_file:
+        # for voisins_c_line in voisins_c_file:
+        vc_data = json.load(voisins_c_file)
+        id = 0
+        found = False
+        for node in node_list:
+            if found: break
+            if node.mac_addr == vc_data['macEtendue']:
+                found = True
+                id = node.id
+        
+        for neighbour in vc_data['neighbours']:
+            link = Link(id, neighbour['shortMac'], neighbour['linkQuality'])
+            node_list[id].addLink(link)
+
+        for pos in vc_data['pos']:
+            link = Link(pos['shortMac'], id, pos['forwardLqi'])
+            node_list[pos['shortMac']].addLink(link)
 
     i = 0
     for node in node_list:
-        print("i = {}; Node id: {}, macAddr: {}, hop_to_main: {}, success_rate: {}".format(i, node.id, node.mac_addr, node.hop_from_main, node.success_rate))
+        l = 1
+        print("Node {}:\nmacAddr: {}, hop_to_main: {}, success_rate: {}\nNeighbours:".format(node.id, node.mac_addr, node.hop_from_main, node.success_rate))
+        for link in node.links:
+            print("Link {}: from {} to {}, quality {}".format(l, link.id_start, link.id_end, link.link_quality))
+            l = l + 1
+
+        print()
         i = i + 1
 
 
