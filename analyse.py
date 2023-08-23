@@ -138,8 +138,8 @@ def main():
            node_list[0].links[node_list[0].indexOfLink(0, i)].setSuccessRate(node_list[i].success_rate * 100)
 
     # Then for node with hop_count h, msg will pass a node that has h-1 hop count, thus calculate the success rate of link
-    for i in range (1, node_count+1):
-        if node_list[i].hop_from_main == 2:
+    # for i in range (1, node_count+1):
+    #     if node_list[i].hop_from_main == 2:
             
             
 
