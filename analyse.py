@@ -1,8 +1,11 @@
 import json
 
+# According to Enedis, the average SNR value (in dB) equals to (LQIvalue / 4) - 10
 def calc_SNR(lqi_value):
     return (lqi_value / 4) - 10
 
+# A class for storing link info.
+# pvt: pos table valid time, used for choosing a valid link_quality value from multiple entries
 class Link:
     def __init__(self, id_start, id_end, link_quality, pvt):
         self.id_start = id_start
@@ -25,6 +28,7 @@ class Link:
         if self.success_rate != -1: return True
         else: return False
 
+# A class for storing link info.
 class Node:
     def __init__(self, id):
         self.id = id
@@ -37,6 +41,7 @@ class Node:
         if link.id_start == self.id:
             self.links.append(link)
     
+    # Return the first index of a link, identified by start & end node id.
     def indexOfLink(self, start, end):
         for link in self.links:
             if start == link.id_start and end == link.id_end:
@@ -51,6 +56,7 @@ def main():
             if "shortMac" in tc_data and tc_data['shortMac'] > node_count:
                 node_count = tc_data['shortMac']
     
+    # Create a list of nodes for further use
     node_list = []
     for i in range (0, node_count+1):
         node_list.append(Node(i))
@@ -86,6 +92,8 @@ def main():
     with open('voisins-c/voisins-c.log') as voisins_c_file:
         for voisins_c_line in voisins_c_file:
             vc_data = json.loads(voisins_c_line)
+            
+            # Find the node with such mac address from the node list
             id = 0
             found = False
             for node in node_list:
@@ -94,12 +102,19 @@ def main():
                     found = True
                     id = node.id
             
+            # Create links from neighbours from neighbour table.
+            # Note in node_A's neighbour table, if an entry with node_B exists, the direction of link is node_B -> node_A.
+            # If the link list already contains such link, the value in neighbour table will be ignored.
             for neighbour in vc_data['neighbours']:
                 temp_link_index = node_list[neighbour['shortMac']].indexOfLink(neighbour['shortMac'], id)
                 if temp_link_index is None:
                     link = Link(neighbour['shortMac'], id, neighbour['linkQuality'], -1)
                     node_list[neighbour['shortMac']].addLink(link)
- 
+
+
+            # Create links to neighbours from pos table.
+            # Note in node_A's pos table, if an entry with node_B exists, the direction of link is node_A -> node_B.
+            # If multiple entries for a same link exists, choose the one with the highest posValidTime (according to Enedis).
             for pos in vc_data['pos']:
                 temp_link_index = node_list[id].indexOfLink(id, pos['shortMac'])
                 if temp_link_index is not None:
@@ -126,7 +141,7 @@ def main():
                             link = Link(0, node.id, vk_data['LQIStatistics']['AverageRevLQI'], -2)
                             node_list[0].addLink(link)
 
-    # Calculate the SNR for each link 
+    # Calculate the success rate for each link 
     # First, get the max hop count
     max_hop_count = -1
     current_count = 2
@@ -152,7 +167,8 @@ def main():
                                 node_list[m].links[temp].setSuccessRate(link_success_rate)
         current_count = current_count + 1        
             
-
+    # Print all infos to the terminal. 
+    # To show all infos please redirect the output to a file.
     i = 0
     for node in node_list:
         l = 1
@@ -164,7 +180,7 @@ def main():
         print()
         i = i + 1
 
-    # Verify no duplicated link exists
+    # This following code verifies no duplicated link exists for every node
     # i = 0
     # for node in node_list:
     #     l = 0
@@ -178,15 +194,6 @@ def main():
     #             m = m + 1
     #         l = l + 1
     #     i = i + 1
-        
-        
-
-    # node = node_list[41]
-    # l = 1
-    # print("Node {}:\nmacAddr: {}, hop_to_main: {}, success_rate: {}\nNeighbours:".format(node.id, node.mac_addr, node.hop_from_main, node.success_rate))
-    # for link in node.links:
-    #     print("Link {}:".format(l), link.toString())
-    #     l = l + 1
 
 if __name__ == "__main__":
     main()
