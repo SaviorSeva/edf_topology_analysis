@@ -95,20 +95,21 @@ def main():
                     id = node.id
             
             for neighbour in vc_data['neighbours']:
-                link = Link(id, neighbour['shortMac'], neighbour['linkQuality'], -1)
-                node_list[id].addLink(link)
-
+                temp_link_index = node_list[neighbour['shortMac']].indexOfLink(neighbour['shortMac'], id)
+                if temp_link_index is None:
+                    link = Link(neighbour['shortMac'], id, neighbour['linkQuality'], -1)
+                    node_list[neighbour['shortMac']].addLink(link)
+ 
             for pos in vc_data['pos']:
-                temp_link_index = node_list[pos['shortMac']].indexOfLink(pos['shortMac'], id)
+                temp_link_index = node_list[id].indexOfLink(id, pos['shortMac'])
                 if temp_link_index is not None:
-                    temp_link_pvt = node_list[pos['shortMac']].links[temp_link_index].pvt
+                    temp_link_pvt = node_list[id].links[temp_link_index].pvt
                     if temp_link_pvt < pos['posValidTime']:
-                        node_list[pos['shortMac']].links[temp_link_index].link_quality = pos['forwardLqi']
-                        node_list[pos['shortMac']].links[temp_link_index].pvt = pos['posValidTime']
-
+                        node_list[id].links[temp_link_index].link_quality = pos['forwardLqi']
+                        node_list[id].links[temp_link_index].pvt = pos['posValidTime']
                 else :
-                    link = Link(pos['shortMac'], id, pos['forwardLqi'], pos['posValidTime'])
-                    node_list[pos['shortMac']].addLink(link)
+                    link = Link(id, pos['shortMac'], pos['forwardLqi'], pos['posValidTime'])
+                    node_list[id].addLink(link)
 
     # Get the neighbours for coodindator
     with open('voisins-k/voisins-k.log') as voisins_k_file:
@@ -121,13 +122,14 @@ def main():
                     if found: break
                     if node.mac_addr == vk_data['MacEtendue']:
                         found = True
-                        if not node_list[0].indexOfLink(0, node.id):
-                            link = Link(0, node.id, vk_data['LQIStatistics']['AverageRevLQI'], -1)
+                        if node_list[0].indexOfLink(0, node.id) is None:
+                            link = Link(0, node.id, vk_data['LQIStatistics']['AverageRevLQI'], -2)
                             node_list[0].addLink(link)
 
     # Calculate the SNR for each link 
     # First, get the max hop count
     max_hop_count = -1
+    current_count = 2
     for i in range (1, node_count+1):
         if node_list[i].hop_from_main > max_hop_count:
             max_hop_count = node_list[i].hop_from_main
@@ -135,12 +137,20 @@ def main():
     # Easy one: the nodes with 1 hop count: set the link success rate by the node success rate directly
     for i in range (1, node_count+1):
         if node_list[i].hop_from_main == 1:
-           node_list[0].links[node_list[0].indexOfLink(0, i)].setSuccessRate(node_list[i].success_rate * 100)
+           node_list[0].links[node_list[0].indexOfLink(0, i)].setSuccessRate(node_list[i].success_rate)
 
     # Then for node with hop_count h, msg will pass a node that has h-1 hop count, thus calculate the success rate of link
-    # for i in range (1, node_count+1):
-    #     if node_list[i].hop_from_main == 2:
-            
+    while current_count <= max_hop_count:
+        for i in range (1, node_count+1):
+            if node_list[i].hop_from_main == current_count:
+                for m in range (1, node_count+1):
+                    if node_list[m].hop_from_main == current_count-1:
+                        link_success_rate = node_list[i].success_rate / node_list[m].success_rate
+                        if link_success_rate <= 1.0:
+                            temp = node_list[m].indexOfLink(m, i)
+                            if temp is not None:
+                                node_list[m].links[temp].setSuccessRate(link_success_rate)
+        current_count = current_count + 1        
             
 
     i = 0
@@ -153,6 +163,30 @@ def main():
 
         print()
         i = i + 1
+
+    # Verify no duplicated link exists
+    # i = 0
+    # for node in node_list:
+    #     l = 0
+    #     while l < len(node.links):
+    #         m = 1
+    #         linkA = node.links[l]
+    #         while l+m < len(node.links):
+    #             linkB = node.links[l+m]
+    #             if linkA.id_start == linkB.id_start and linkA.id_end == linkB.id_end:
+    #                 print("ERROR: Repeat detected for\n", linkA.toString(), "\n", linkB.toString())
+    #             m = m + 1
+    #         l = l + 1
+    #     i = i + 1
+        
+        
+
+    # node = node_list[41]
+    # l = 1
+    # print("Node {}:\nmacAddr: {}, hop_to_main: {}, success_rate: {}\nNeighbours:".format(node.id, node.mac_addr, node.hop_from_main, node.success_rate))
+    # for link in node.links:
+    #     print("Link {}:".format(l), link.toString())
+    #     l = l + 1
 
 if __name__ == "__main__":
     main()
