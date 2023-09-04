@@ -5,13 +5,13 @@ import xml.etree.ElementTree as etree
 def calc_SNR(lqi_value):
     return (lqi_value / 4) - 10
 
-def to_eui(id):
+def to_eui(id) -> str:
     if id < 15 :
         return "FF:FF:FF:FF:FE:00:00:0" + format(id+1, 'x')
     elif id < 255:
         return "FF:FF:FF:FF:FE:00:00:" + format(id+1, 'x')
     else :
-        return None
+        return ""
     
 
 # SNR(dB) to Attenuation(dB) when noise=48dBuV: Att = 72-SNR, SNR range [-10, 22]
@@ -64,7 +64,7 @@ class Node:
             if start == link.id_start and end == link.id_end:
                 return self.links.index(link)
 
-def main():
+def get_node_count() -> int:
     # Get the total number of nodes    
     node_count = 0
     with open('traces-cpl/traces-cpl.log') as traces_cpl_file:
@@ -73,12 +73,9 @@ def main():
             if "shortMac" in tc_data and tc_data['shortMac'] > node_count:
                 node_count = tc_data['shortMac']
     node_count = node_count + 1
+    return node_count
 
-    # Create a list of nodes for further use
-    node_list = []
-    for i in range (0, node_count):
-        node_list.append(Node(i))
-    
+def get_info_from_files(node_list, node_count):
     # Get the mac address of each node
     with open('traces-cpl/traces-cpl.log') as traces_cpl_file:
         for traces_cpl_line in traces_cpl_file:
@@ -88,8 +85,8 @@ def main():
                 if "shortMac" in tc_data:
                     node_list[tc_data['shortMac']].id = tc_data['shortMac']
                     node_list[tc_data['shortMac']].mac_addr = tc_data['mac']
-
-    # Get the distance (hop count) to coordinator for each node
+    
+     # Get the distance (hop count) to coordinator for each node
     with open('indicateurs-adp-k/indicateurs-adp-k.log') as indicateurs_adp_k_file:
         iak_data = json.load(indicateurs_adp_k_file)
         for entry in iak_data['AdpRoutingTable']:
@@ -183,23 +180,39 @@ def main():
                             temp = node_list[m].indexOfLink(m, i)
                             if temp is not None:
                                 node_list[m].links[temp].setSuccessRate(link_success_rate)
-        current_count = current_count + 1        
-            
+        current_count = current_count + 1
+
+def print_to_terminal(node_list):     
     # Print all infos to the terminal. 
     # To show all infos please redirect the output to a file.
-    # i = 0
-    # for node in node_list:
-    #     l = 1
-    #     print(f"Node {node.id}:\nmacAddr: {node.mac_addr}, hop_to_main: {node.hop_from_main}, success_rate: {node.success_rate}\nNeighbours:")
-    #     for link in node.links:
-    #         print("Link {}:".format(l), link.toString())
-    #         l = l + 1
+    i = 0
+    for node in node_list:
+        l = 1
+        print(f"Node {node.id}:\nmacAddr: {node.mac_addr}, hop_to_main: {node.hop_from_main}, success_rate: {node.success_rate}\nNeighbours:")
+        for link in node.links:
+            print("Link {}:".format(l), link.toString())
+            l = l + 1
 
-    #     print()
-    #     i = i + 1
+        print()
+        i = i + 1
 
-    print(f"Node count: {node_count}")
+def verif_node_list(node_list):
+    # This following code verifies no duplicated link exists for every node
+    i = 0
+    for node in node_list:
+        l = 0
+        while l < len(node.links):
+            m = 1
+            linkA = node.links[l]
+            while l+m < len(node.links):
+                linkB = node.links[l+m]
+                if linkA.id_start == linkB.id_start and linkA.id_end == linkB.id_end:
+                    print("ERROR: Repeat detected for\n", linkA.toString(), "\n", linkB.toString())
+                m = m + 1
+            l = l + 1
+        i = i + 1
 
+def write_to_xml(node_list, node_count, file_name):
     # Translate the info from node_list to nSim xml config file
     sim_config = etree.Element("simulation_config")
     
@@ -280,24 +293,24 @@ def main():
     tree = etree.ElementTree(sim_config)
     etree.indent(tree, '  ')
 
-    with open ("topo.xml", "wb") as output :
+    with open (file_name, "wb") as output :
         tree.write(output, encoding='utf-8', xml_declaration=True)
 
+def main():
+    # Get the total number of nodes
+    node_count = get_node_count()
 
-    # This following code verifies no duplicated link exists for every node
-    # i = 0
-    # for node in node_list:
-    #     l = 0
-    #     while l < len(node.links):
-    #         m = 1
-    #         linkA = node.links[l]
-    #         while l+m < len(node.links):
-    #             linkB = node.links[l+m]
-    #             if linkA.id_start == linkB.id_start and linkA.id_end == linkB.id_end:
-    #                 print("ERROR: Repeat detected for\n", linkA.toString(), "\n", linkB.toString())
-    #             m = m + 1
-    #         l = l + 1
-    #     i = i + 1
+    # Create a list of nodes for further use
+    node_list = []
+    for i in range (0, node_count):
+        node_list.append(Node(i))
+    
+    
+    get_info_from_files(node_list, node_count)
+
+    print(f"Node count: {node_count}")
+
+    write_to_xml(node_list, node_count, "topo.xml")
 
 if __name__ == "__main__":
     main()
