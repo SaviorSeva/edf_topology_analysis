@@ -1,5 +1,9 @@
 # edf_topology_analysis
 
+Prerequistes:
+pip install -U matplotlib
+pip install networkx
+
 Usage:
 put the script in one of the following repository:
   - 021774092604_lu
