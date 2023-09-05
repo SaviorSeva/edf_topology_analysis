@@ -1,5 +1,8 @@
 import json
 import xml.etree.ElementTree as etree
+import matplotlib.pyplot as plt
+import networkx as nx
+import plotly.graph_objects as go
 
 # According to Enedis, the average SNR value (in dB) equals to (LQIvalue / 4) - 10
 def calc_SNR(lqi_value):
@@ -212,6 +215,14 @@ def verif_node_list(node_list):
             l = l + 1
         i = i + 1
 
+def remove_no_comms_link(node_list):
+    for node in node_list:
+        for link in node.links[:]:
+            if link.success_rate == -1:
+                # print("Removed")
+                node.links.remove(link)
+
+
 def write_to_xml(node_list, node_count, file_name):
     # Translate the info from node_list to nSim xml config file
     sim_config = etree.Element("simulation_config")
@@ -296,6 +307,17 @@ def write_to_xml(node_list, node_count, file_name):
     with open (file_name, "wb") as output :
         tree.write(output, encoding='utf-8', xml_declaration=True)
 
+def to_graph(node_list, node_count):
+    G = nx.DiGraph()
+    for i in range (0, node_count):
+        G.add_node(i)
+    for node in node_list:
+        for link in node.links:
+            G.add_edge(link.id_start, link.id_end)
+            
+    nx.draw(G, pos=nx.circular_layout(G), with_labels=True)
+    plt.show()  
+
 def main():
     # Get the total number of nodes
     node_count = get_node_count()
@@ -308,9 +330,15 @@ def main():
     
     get_info_from_files(node_list, node_count)
 
+    remove_no_comms_link(node_list)
+
     print(f"Node count: {node_count}")
 
-    write_to_xml(node_list, node_count, "topo.xml")
+
+    print_to_terminal(node_list)
+    # write_to_xml(node_list, node_count, "topo.xml")
+
+    to_graph(node_list, node_count)
 
 if __name__ == "__main__":
     main()
