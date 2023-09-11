@@ -1,8 +1,10 @@
+import sys
 import json
 import xml.etree.ElementTree as etree
-import matplotlib.pyplot as plt
+import matplotlib as mpl
 import networkx as nx
-import plotly.graph_objects as go
+import numpy as np
+# import plotly.graph_objects as go
 
 # According to Enedis, the average SNR value (in dB) equals to (LQIvalue / 4) - 10
 def calc_SNR(lqi_value):
@@ -15,11 +17,10 @@ def to_eui(id) -> str:
         return "FF:FF:FF:FF:FE:00:00:" + format(id+1, 'x')
     else :
         return ""
-    
 
 # SNR(dB) to Attenuation(dB) when noise=48dBuV: Att = 72-SNR, SNR range [-10, 22]
-# LQI to Attenuation(dB) when noise=48dBuV: Att = 82-0.25*LQI, LQI range [0, 128]
-# Attuation range: [50, 82]
+# LQI to Attenuation(dB) when noise=48dBuV: Att = 82-0.25*LQI, LQI range [0, 255]
+# Attuation range: [18.25, 82]
 def lqi_to_att(lqi_value):
     return int(82 - 0.25*int(lqi_value))
 
@@ -53,7 +54,10 @@ class Node:
     def __init__(self, id):
         self.id = id
         self.mac_addr = "-1"
-        self.hop_from_main = -1
+        if id == 0:
+            self.hop_from_main = 0
+        else:
+            self.hop_from_main = -1
         self.success_rate = 0.0
         self.links = []
     
@@ -66,11 +70,15 @@ class Node:
         for link in self.links:
             if start == link.id_start and end == link.id_end:
                 return self.links.index(link)
+    
+    def __str__(self) -> str:
+        return str(self.id)
+        
 
-def get_node_count() -> int:
+def get_node_count(file_path) -> int:
     # Get the total number of nodes    
     node_count = 0
-    with open('traces-cpl/traces-cpl.log') as traces_cpl_file:
+    with open(file_path + '/traces-cpl/traces-cpl.log') as traces_cpl_file:
         for traces_cpl_line in traces_cpl_file:
             tc_data = json.loads(traces_cpl_line)
             if "shortMac" in tc_data and tc_data['shortMac'] > node_count:
@@ -78,9 +86,9 @@ def get_node_count() -> int:
     node_count = node_count + 1
     return node_count
 
-def get_info_from_files(node_list, node_count):
+def get_info_from_files(file_path, node_list, node_count):
     # Get the mac address of each node
-    with open('traces-cpl/traces-cpl.log') as traces_cpl_file:
+    with open(file_path + '/traces-cpl/traces-cpl.log') as traces_cpl_file:
         for traces_cpl_line in traces_cpl_file:
             tc_data = json.loads(traces_cpl_line)
 
@@ -90,13 +98,13 @@ def get_info_from_files(node_list, node_count):
                     node_list[tc_data['shortMac']].mac_addr = tc_data['mac']
     
      # Get the distance (hop count) to coordinator for each node
-    with open('indicateurs-adp-k/indicateurs-adp-k.log') as indicateurs_adp_k_file:
+    with open(file_path + '/indicateurs-adp-k/indicateurs-adp-k.log') as indicateurs_adp_k_file:
         iak_data = json.load(indicateurs_adp_k_file)
         for entry in iak_data['AdpRoutingTable']:
             node_list[int(entry['DestAddress'])].hop_from_main = int(entry['HopCount'])
 
     # Get the success rate (from main coordinator) for each node
-    with open('stats-cpl-k/stats-cpl-k.log') as stats_cpl_k_file:
+    with open(file_path + '/stats-cpl-k/stats-cpl-k.log') as stats_cpl_k_file:
         for stats_cpl_k_line in stats_cpl_k_file:
             sck_data = json.loads(stats_cpl_k_line)
             found = False
@@ -107,7 +115,7 @@ def get_info_from_files(node_list, node_count):
                     node.success_rate = int(sck_data['ComOkNumber']) / int(sck_data['ComNumber'])  
 
     # Get the neighbour data of each node
-    with open('voisins-c/voisins-c.log') as voisins_c_file:
+    with open(file_path + '/voisins-c/voisins-c.log') as voisins_c_file:
         for voisins_c_line in voisins_c_file:
             vc_data = json.loads(voisins_c_line)
             
@@ -145,7 +153,7 @@ def get_info_from_files(node_list, node_count):
                     node_list[id].addLink(link)
 
     # Get the neighbours for coodindator
-    with open('voisins-k/voisins-k.log') as voisins_k_file:
+    with open(file_path + '/voisins-k/voisins-k.log') as voisins_k_file:
         for voisins_k_line in voisins_k_file:
             vk_data = json.loads(voisins_k_line)
             if int(vk_data['LQIStatistics']['AverageRevLQI']) != 0 :
@@ -172,7 +180,7 @@ def get_info_from_files(node_list, node_count):
         if node_list[i].hop_from_main == 1:
            node_list[0].links[node_list[0].indexOfLink(0, i)].setSuccessRate(node_list[i].success_rate)
 
-    # Then for node with hop_count h, msg will pass a node that has h-1 hop count, thus calculate the success rate of link
+    # Then for node with hop_count h, msg must pass a node that has h-1 hop count, thus calculate the success rate of link
     while current_count <= max_hop_count:
         for i in range (1, node_count):
             if node_list[i].hop_from_main == current_count:
@@ -222,7 +230,6 @@ def remove_no_comms_link(node_list):
                 # print("Removed")
                 node.links.remove(link)
 
-
 def write_to_xml(node_list, node_count, file_name):
     # Translate the info from node_list to nSim xml config file
     sim_config = etree.Element("simulation_config")
@@ -245,9 +252,6 @@ def write_to_xml(node_list, node_count, file_name):
 
     min_time_step = etree.SubElement(simu, "min_time_step")
     min_time_step.text = "100000"
-
-    max_time_step = etree.SubElement(simu, "max_time_step")
-    max_time_step.text = "500000000"
 
     # node_configuration
     node_config = etree.Element("node_configuration")
@@ -307,20 +311,88 @@ def write_to_xml(node_list, node_count, file_name):
     with open (file_name, "wb") as output :
         tree.write(output, encoding='utf-8', xml_declaration=True)
 
-def to_graph(node_list, node_count):
+def get_max_hop_count(node_list, node_count): 
+    max_hop_count = -1
+    for i in range (1, node_count):
+        if node_list[i].hop_from_main > max_hop_count:
+            max_hop_count = node_list[i].hop_from_main
+    return max_hop_count
+
+def to_color(node: Node):
+    if node.hop_from_main == -1:
+        return "#FF0000"
+    elif node.hop_from_main == 0:
+        return "#00FF00"
+    elif node.hop_from_main == 1:
+        return "#0000FF"
+    elif node.hop_from_main == 2:
+        return "#00FFFF"
+    elif node.hop_from_main == 3:
+        return "#FF00FF"
+    elif node.hop_from_main == 4:
+        return "#800000"
+    elif node.hop_from_main == 5:
+        return "#808000"
+    elif node.hop_from_main == 6:
+        return "#008000"
+    elif node.hop_from_main == 7:
+        return "#800080"
+    else:
+        return "#008080"
+
+def to_graph(node_list, node_count, max_hop_count):
+    dists = []
     G = nx.DiGraph()
     for i in range (0, node_count):
+        dists.append(to_color(node_list[i]))
         G.add_node(i)
+    
     for node in node_list:
         for link in node.links:
-            G.add_edge(link.id_start, link.id_end)
-            
-    nx.draw(G, pos=nx.circular_layout(G), with_labels=True)
-    plt.show()  
+            w = int(link.link_quality) / 255
+            G.add_edge(link.id_start, link.id_end, weight=w)
+        
+    edges = G.edges()
+    weights = [G[u][v]['weight'] for u,v in edges]
+    for w in weights:
+        if(w < 0.0 or w > 1.0):
+            print("ERROR" + str(w))
+
+    # center_node = 0
+    # layers = [{center_node}]
+    # current_set = set(G) - {center_node}
+    # for i in range(1, max_hop_count+1):
+    #     node_set = set()
+    #     for node in node_list:
+    #         if node.hop_from_main == i:
+    #             node_set.add(node.id)
+    #     current_set = current_set - node_set
+    #     layers.append(node_set)
+
+    # for layer in layers:
+    #     print(layer)
+
+    outer_nodes = set(G) - {0}
+    pos = nx.spring_layout(G.subgraph(outer_nodes))
+    # pos = nx.circular_layout(G.subgraph(layers[max_hop_count-1]), scale=max_hop_count)
+    # for i in range(max_hop_count-1, 1):
+    #     print(i)
+    #     pos = nx.circular_layout(G.subgraph(layers[i]), scale=i)
+
+    pos[0] = np.array([0, 0])
+
+    # print(pos)
+
+    nx.draw_networkx_nodes(G, pos, node_color=dists)
+    nx.draw_networkx_labels(G, pos)
+    # for edge in G.edges(data="weight"):
+        # nx.draw_networkx_edges(G, pos, edgelist=[edge], alpha=[weights])
+    nx.draw_networkx_edges(G, pos, edgelist=edges, alpha=weights)
+    mpl.pyplot.show()
 
 def main():
     # Get the total number of nodes
-    node_count = get_node_count()
+    node_count = get_node_count(sys.argv[1])
 
     # Create a list of nodes for further use
     node_list = []
@@ -328,17 +400,22 @@ def main():
         node_list.append(Node(i))
     
     
-    get_info_from_files(node_list, node_count)
+    get_info_from_files(sys.argv[1], node_list, node_count)
 
-    remove_no_comms_link(node_list)
+    if "-r" in sys.argv:
+        remove_no_comms_link(node_list)
 
     print(f"Node count: {node_count}")
 
+    if "-p" in sys.argv:
+        print_to_terminal(node_list)
+    
+    if "-w" in sys.argv:
+        write_to_xml(node_list, node_count, "topo.xml")
 
-    print_to_terminal(node_list)
-    # write_to_xml(node_list, node_count, "topo.xml")
+    if "-g" in sys.argv:
+        max_hop_count = get_max_hop_count(node_list, node_count)
+        to_graph(node_list, node_count, max_hop_count)
 
-    to_graph(node_list, node_count)
-
-if __name__ == "__main__":
+if __name__ == "__main__":  
     main()
