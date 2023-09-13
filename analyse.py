@@ -48,6 +48,9 @@ class Link:
     def hasValidsuccess_rate(self):
         if self.success_rate != -1: return True
         else: return False
+    
+    def cost_of_link(self):
+        return 256 - self.link_quality
 
 # A class for storing link info.
 class Node:
@@ -72,7 +75,7 @@ class Node:
                 return self.links.index(link)
     
     def __str__(self) -> str:
-        return str(self.id)
+        return f"Node {self.id}:\nmacAddr: {self.mac_addr}, hop_to_main: {self.hop_from_main}, success_rate: {self.success_rate}"
         
 
 def get_node_count(file_path) -> int:
