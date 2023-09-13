@@ -38,8 +38,7 @@ def get_min_node(Q: list, dist: list):
     return res
 
 # A route finding algorithm based on dijkstra's algorithm
-def find_route(node_list, node_count, start_id, end_id):
-    if start_id == end_id: return [start_id]
+def find_all_route(node_list, node_count, start_id):
     dist = []
     prev = []
     # Q is a list of id (integer) rather than a list of nodes
@@ -52,7 +51,6 @@ def find_route(node_list, node_count, start_id, end_id):
     
     while len(Q):
         u = get_min_node(Q, dist)
-        if u == end_id: break
         Q.remove(u)
 
         for link in node_list[u].links:
@@ -61,15 +59,18 @@ def find_route(node_list, node_count, start_id, end_id):
                 dist[link.id_end] = alt
                 prev[link.id_end] = u
 
-    S = []
-    u = end_id
-    if prev[u] is not None or u == start_id:
-        while u != -1:
-            S.insert(0, u)
-            u = prev[u]
+    res = []
+    for i in range (0, node_count):
+        S = []
+        u = i
+        if prev[u] != -1 or u == start_id:
+            while u != -1:
+                S.insert(0, u)
+                u = prev[u]
 
-    print(f"Route from {start_id} to {end_id} is {S}.")
-    return S
+        print(f"Route from {start_id} to {i} is {S}.")
+        res.append(S)
+    return res
 
 def find_route_test(node_list, start_id, end_id):
     if start_id == 1:
@@ -135,24 +136,27 @@ def find_route_test(node_list, start_id, end_id):
         if(end_id == 5): return [7, 6, 3, 4]
         if(end_id == 6): return [7, 6]
         if(end_id == 7): return [7]
-    
 
-def ac_by_total_count(node_count, node_list):
+def ac_by_total_count_all(node_count, node_list):
     ac_id_list = []
     total_dist_list = [1e7]
     for i in range (1, node_count):
         total_dist_list.append(0)
+
+        dist_mc_list = []
         for node in node_list:
-            dist_mc = node.hop_from_main
-            route = find_route(node_list, node_count, i, node.id)
-            dist_ac = len(route) - 1
-            # print(f"For {node.id}, dist_mc to N0 = {dist_mc}, dist_ac to N{i} = {dist_ac}, value {min(dist_mc, dist_ac)} selected.")
+            dist_mc_list.append(node.hop_from_main)
+        dist_ac_list = find_all_route(node_list, node_count, i)
+
+        for node in node_list:
+            dist_mc = dist_mc_list[node.id]
+            dist_ac = len(dist_ac_list[node.id]) - 1
+            print(f"For {node.id}, dist_mc to N0 = {dist_mc}, dist_ac to N{i} = {dist_ac}, value {min(dist_mc, dist_ac)} selected.")
             total_dist_list[i] = total_dist_list[i] + min(dist_mc, dist_ac)
-        # print(f"Total dist for N{i} is {total_dist_list[i]}")
+        print(f"Total dist for N{i} is {total_dist_list[i]}")
     selected_node_id = (total_dist_list.index(min(total_dist_list)))
     ac_id_list.append(node_list[selected_node_id])
     return ac_id_list
-
 
 def write_to_xml_with_ac(node_list, node_count, add_concentrator_id_list, file_name):
     # Translate the info from node_list to nSim xml config file
@@ -326,8 +330,11 @@ def test():
     
     # print_to_terminal(node_list)
 
+    # for i in range(1, node_count):
+        # find_route_v2(node_list, node_count, i)
+
     # ac_list = ac_on_furthest(node_count, node_list)
-    ac_list = ac_by_total_count(node_count, node_list)
+    ac_list = ac_by_total_count_all(node_count, node_list)
     print("Selected Node: ", str(ac_list[0]))
 
     
