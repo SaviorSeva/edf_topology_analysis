@@ -38,7 +38,7 @@ def get_min_node(Q: list, dist: list):
     return res
 
 # A route finding algorithm based on dijkstra's algorithm
-def find_all_route(node_list, node_count, start_id):
+def find_all_route_by_dist(node_list, node_count, start_id):
     dist = []
     prev = []
     # Q is a list of id (integer) rather than a list of nodes
@@ -52,6 +52,7 @@ def find_all_route(node_list, node_count, start_id):
     while len(Q):
         u = get_min_node(Q, dist)
         Q.remove(u)
+        # print(f"u is {u}")
 
         for link in node_list[u].links:
             alt = dist[u] + 1
@@ -68,9 +69,56 @@ def find_all_route(node_list, node_count, start_id):
                 S.insert(0, u)
                 u = prev[u]
 
-        print(f"Route from {start_id} to {i} is {S}.")
+        # print(f"Route from {start_id} to {i} is {S}.")
         res.append(S)
     return res
+
+def find_all_route_by_cost(node_list, node_count, start_id):
+    cost = []
+    prev = []
+    # Q is a list of id (integer) rather than a list of nodes
+    Q = []
+    for i in range (0, node_count):
+        cost.append(1e7)
+        prev.append(-1)
+        Q.append(i)
+    cost[start_id] = 0
+    
+    while len(Q):
+        u = get_min_node(Q, cost)
+        Q.remove(u)
+
+        for link in node_list[u].links:
+            start = link.id_start
+            end = link.id_end
+            cost_fwd = link.directional_cost()      # Get the cost forward
+            
+            # Find the backward link
+            bwd_link_index = node_list[end].indexOfLink(end, start)
+            cost_bwd = 0
+            if bwd_link_index == -1: cost_bwd = 1e7
+            else:
+                bwd_link = node_list[end].links[bwd_link_index]
+                cost_bwd = bwd_link.directional_cost()
+
+            alt = cost[u] + max(cost_fwd, cost_bwd) + 4
+            if alt < cost[link.id_end]:
+                cost[link.id_end] = alt
+                prev[link.id_end] = u
+
+    # print(f"Cost table of node {start_id} is {cost}")
+    res = []
+    for i in range (0, node_count):
+        S = []
+        u = i
+        if prev[u] != -1 or u == start_id:
+            while u != -1:
+                S.insert(0, u)
+                u = prev[u]
+
+        # print(f"Route from {start_id} to {i} is {S}.")
+        res.append(S)
+    return cost, res
 
 def find_route_test(node_list, start_id, end_id):
     if start_id == 1:
@@ -137,7 +185,7 @@ def find_route_test(node_list, start_id, end_id):
         if(end_id == 6): return [7, 6]
         if(end_id == 7): return [7]
 
-def ac_by_total_count_all(node_count, node_list):
+def ac_by_total_hop_count(node_count, node_list, print_to_terminal=False):
     ac_id_list = []
     total_dist_list = [1e7]
     for i in range (1, node_count):
@@ -146,16 +194,52 @@ def ac_by_total_count_all(node_count, node_list):
         dist_mc_list = []
         for node in node_list:
             dist_mc_list.append(node.hop_from_main)
-        dist_ac_list = find_all_route(node_list, node_count, i)
+        dist_ac_list = find_all_route_by_dist(node_list, node_count, i)
 
         for node in node_list:
             dist_mc = dist_mc_list[node.id]
             dist_ac = len(dist_ac_list[node.id]) - 1
-            print(f"For {node.id}, dist_mc to N0 = {dist_mc}, dist_ac to N{i} = {dist_ac}, value {min(dist_mc, dist_ac)} selected.")
+            if print_to_terminal: print(f"For {node.id}, dist_mc to N0 = {dist_mc}, dist_ac to N{i} = {dist_ac}, value {min(dist_mc, dist_ac)} selected.")
             total_dist_list[i] = total_dist_list[i] + min(dist_mc, dist_ac)
-        print(f"Total dist for N{i} is {total_dist_list[i]}")
+        if print_to_terminal: print(f"Total dist for N{i} is {total_dist_list[i]}")
     selected_node_id = (total_dist_list.index(min(total_dist_list)))
     ac_id_list.append(node_list[selected_node_id])
+    return ac_id_list
+
+def ac_by_total_cost_all(node_count, node_list, print_to_terminal=False):
+    ac_id_list = []
+    cost_final = []
+    route_final = []
+
+    cost_mc, route_mc = find_all_route_by_cost(node_list, node_count, 0)
+    selected_node = -1
+    min_total_cost = 1e7
+
+    for s in range(1, node_count):
+        cost_ac, route_ac = find_all_route_by_cost(node_list, node_count, s)
+
+        cost_final = []
+        route_final = []
+        cost_total = 0
+
+        for e in range (0, node_count):
+            if(cost_ac[e] < cost_mc[e]):
+                cost_final.append(cost_ac[e])
+                route_final.append(route_ac[e])
+            else:
+                cost_final.append(cost_mc[e])
+                route_final.append(route_mc[e])
+            cost_total = cost_total + cost_final[e]
+            if print_to_terminal:  print(f"When AC on node {s}, the route to {e} is {route_final[e]} with cost of {cost_final[e]}")
+
+        if print_to_terminal:
+            print(f"Total cost is {cost_total}")    
+            print()
+
+        if cost_total < min_total_cost:
+            selected_node = s
+            min_total_cost = cost_total
+    ac_id_list.append(node_list[selected_node])
     return ac_id_list
 
 def write_to_xml_with_ac(node_list, node_count, add_concentrator_id_list, file_name):
@@ -269,30 +353,30 @@ def test():
     for i in range (0, node_count):
         n = Node(i)
         if i==0:
-            l = Link(0, 1, 128, -1)
+            l = Link(0, 1, 255, -1)
             l.setSuccessRate(256)
             n.addLink(l)
         elif i==1:
-            l1 = Link(1, 0, 128, -1)
-            l2 = Link(1, 2, 128, -1)
+            l1 = Link(1, 0, 255, -1)
+            l2 = Link(1, 2, 255, -1)
             l1.setSuccessRate(256)
             l2.setSuccessRate(256)
             n.addLink(l1)
             n.addLink(l2)
             n.hop_from_main = 1
         elif i==2:
-            l1 = Link(2, 1, 128, -1)
-            l2 = Link(2, 3, 128, -1)
+            l1 = Link(2, 1, 255, -1)
+            l2 = Link(2, 3, 255, -1)
             l1.setSuccessRate(256)
             l2.setSuccessRate(256)
             n.addLink(l1)
             n.addLink(l2)
             n.hop_from_main = 2
         elif i==3:
-            l1 = Link(3, 2, 128, -1)
-            l2 = Link(3, 4, 128, -1)
-            l3 = Link(3, 5, 128, -1)
-            l4 = Link(3, 6, 128, -1)
+            l1 = Link(3, 2, 255, -1)
+            l2 = Link(3, 4, 255, -1)
+            l3 = Link(3, 5, 255, -1)
+            l4 = Link(3, 6, 16, -1)
             l1.setSuccessRate(256)
             l2.setSuccessRate(256)
             l3.setSuccessRate(256)
@@ -303,25 +387,25 @@ def test():
             n.addLink(l4)
             n.hop_from_main = 3
         elif i==4:
-            l = Link(4, 3, 128, -1)
+            l = Link(4, 3, 255, -1)
             l.setSuccessRate(256)
             n.addLink(l)
             n.hop_from_main = 4
         elif i==5:
-            l = Link(5, 3, 128, -1)
+            l = Link(5, 3, 255, -1)
             l.setSuccessRate(256)
             n.addLink(l)
             n.hop_from_main = 4
         elif i==6:
-            l1 = Link(6, 3, 128, -1)
-            l2 = Link(6, 7, 128, -1)
+            l1 = Link(6, 3, 16, -1)
+            l2 = Link(6, 7, 255, -1)
             l1.setSuccessRate(256)
             l2.setSuccessRate(256)
             n.addLink(l1)
             n.addLink(l2)
             n.hop_from_main = 4
         else:
-            l = Link(7, 6, 128, -1)
+            l = Link(7, 6, 255, -1)
             l.setSuccessRate(256)
             n.addLink(l)
             n.hop_from_main = 5
@@ -330,21 +414,106 @@ def test():
     
     # print_to_terminal(node_list)
 
-    # for i in range(1, node_count):
-        # find_route_v2(node_list, node_count, i)
+    
 
     # ac_list = ac_on_furthest(node_count, node_list)
-    ac_list = ac_by_total_count_all(node_count, node_list)
+    ac_list = ac_by_total_hop_count(node_count, node_list)
     print("Selected Node: ", str(ac_list[0]))
 
     
     return None
 
+def test2():
+    node_count = 9
+    node_list = []
+    for i in range (0, node_count):
+        n = Node(i)
+        if i==0:
+            l = Link(0, 1, 255, -1)
+            l.setSuccessRate(256)
+            n.addLink(l)
+        elif i==1:
+            l1 = Link(1, 0, 255, -1)
+            l2 = Link(1, 2, 255, -1)
+            l1.setSuccessRate(256)
+            l2.setSuccessRate(256)
+            n.addLink(l1)
+            n.addLink(l2)
+            n.hop_from_main = 1
+        elif i==2:
+            l1 = Link(2, 1, 255, -1)
+            l2 = Link(2, 3, 0, -1)
+            l3 = Link(2, 6, 255, -1)
+            l4 = Link(2, 7, 255, -1)
+            l1.setSuccessRate(256)
+            l2.setSuccessRate(256)
+            l3.setSuccessRate(256)
+            l4.setSuccessRate(256)
+            n.addLink(l1)
+            n.addLink(l2)
+            n.addLink(l3)
+            n.addLink(l4)
+            n.hop_from_main = 2
+        elif i==3:
+            l1 = Link(3, 2, 0, -1)
+            l2 = Link(3, 4, 255, -1)
+            l3 = Link(3, 5, 255, -1)
+            l1.setSuccessRate(256)
+            l2.setSuccessRate(256)
+            l3.setSuccessRate(256)
+            n.addLink(l1)
+            n.addLink(l2)
+            n.addLink(l3)
+            n.hop_from_main = 3
+        elif i==4:
+            l = Link(4, 3, 255, -1)
+            l.setSuccessRate(256)
+            n.addLink(l)
+            n.hop_from_main = 4
+        elif i==5:
+            l = Link(5, 3, 255, -1)
+            l.setSuccessRate(256)
+            n.addLink(l)
+            n.hop_from_main = 4
+        elif i==6:
+            l = Link(6, 2, 255, -1)
+            l.setSuccessRate(256)
+            n.addLink(l)
+            n.hop_from_main = 3
+        elif i==7:
+            l1 = Link(7, 2, 255, -1)
+            l2 = Link(7, 8, 255, -1)
+            l1.setSuccessRate(256)
+            l2.setSuccessRate(256)
+            n.addLink(l1)
+            n.addLink(l2)
+            n.hop_from_main = 1
+        else:
+            l = Link(8, 7, 255, -1)
+            l.setSuccessRate(256)
+            n.addLink(l)
+            n.hop_from_main = 5
+        
+        n.success_rate = 100.0
+        node_list.append(n)
+
+    print_to_terminal(node_list)
+
+    ac_list = ac_by_total_hop_count(node_count, node_list, print_to_terminal=True)
+    print("Selected Node By hop_count: ", str(ac_list[0]))
+
+    ac_list = ac_by_total_cost_all(node_count, node_list, print_to_terminal=True)
+    print("Selected Node By cost: ", str(ac_list[0]))
+        
 def main():
     if "-t" in sys.argv:
         test()
         return None
     
+    if "-a" in sys.argv:
+        test2()
+        return None
+
     # Get the total number of nodes
     node_count = get_node_count(sys.argv[1])
 
