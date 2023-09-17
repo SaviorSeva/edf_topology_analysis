@@ -208,8 +208,6 @@ def ac_by_total_hop_count(node_count, node_list, print_to_terminal=False):
 
 def ac_by_total_cost_all(node_count, node_list, print_to_terminal=False):
     ac_id_list = []
-    cost_final = []
-    route_final = []
 
     cost_mc, route_mc = find_all_route_by_cost(node_list, node_count, 0)
     selected_node = -1
@@ -319,9 +317,6 @@ def write_to_xml_with_ac(node_list, node_count, add_concentrator_id_list, file_n
     g3_noise = etree.Element("g3_noise")
     g3_noise.text = "48"
     defaults.append(g3_noise)
-    g3_maxlqi = etree.Element("g3_maxlqi")
-    g3_maxlqi.text = "128"
-    defaults.append(g3_maxlqi)
 
     for node in node_list:
         node_xml = etree.Element("node")
