@@ -286,9 +286,6 @@ def write_to_xml(node_list, node_count, file_name):
     g3_noise = etree.Element("g3_noise")
     g3_noise.text = "48"
     defaults.append(g3_noise)
-    g3_maxlqi = etree.Element("g3_maxlqi")
-    g3_maxlqi.text = "128"
-    defaults.append(g3_maxlqi)
 
     for node in node_list:
         node_xml = etree.Element("node")
